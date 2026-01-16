@@ -64,6 +64,7 @@ html,body{
   outline:none;
 }
 
+/* Hinweistext – standardmäßig unsichtbar */
 .hint{
   position:absolute;
   top:54%;
@@ -71,7 +72,11 @@ html,body{
   text-align:center;
   color:#fff;
   font-size:16px;
+  opacity:0;
+  transition:opacity .4s ease;
 }
+
+.hint.on{ opacity:1; }
 
 .denied{
   position:absolute;
@@ -111,7 +116,7 @@ html,body{
       <input maxlength="1"><input maxlength="1"><input maxlength="1">
       <input maxlength="1"><input maxlength="1"><input maxlength="1"><input maxlength="1">
     </div>
-    <div class="hint">Bitte geben Sie den Zugangscode ein.</div>
+    <div id="hint" class="hint">Bitte geben Sie den Zugangscode ein.</div>
   </div>
 
   <div id="deniedText" class="denied">Zugang verweigert</div>
@@ -124,10 +129,12 @@ const denied = document.getElementById('deniedVid');
 const codeImg = document.getElementById('codeImg');
 const codeUI = document.getElementById('codeUI');
 const deniedText = document.getElementById('deniedText');
+const hint = document.getElementById('hint');
 const inputs = document.querySelectorAll('.code-row input');
 
 function show(el){ el.classList.add('on'); }
 function hide(el){ el.classList.remove('on'); }
+function clearInputs(){ inputs.forEach(i => i.value = ""); }
 
 show(login);
 login.play();
@@ -142,6 +149,7 @@ server.onended = () => {
   hide(server);
   show(codeImg);
   codeUI.classList.add('on');
+  hint.classList.add('on');     // TEXT ERST HIER
   inputs[0].focus();
 };
 
@@ -149,10 +157,15 @@ inputs.forEach((i,idx)=>{
   i.addEventListener('input',()=>{
     if(i.value && inputs[idx+1]) inputs[idx+1].focus();
   });
+
   i.addEventListener('keydown',e=>{
     if(e.key==="Enter"){
-      hide(codeImg);
+      // UI & Text ausblenden
+      hint.classList.remove('on');
       codeUI.classList.remove('on');
+      clearInputs();
+
+      hide(codeImg);
       show(denied);
       denied.play();
       deniedText.classList.add('on');
