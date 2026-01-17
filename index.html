@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-<meta charset="UTF-8">
+<meta charset="UTF-8" />
 <title>TRIDENS – Secure Login</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
 <style>
   html,body{
@@ -35,7 +35,7 @@
   }
   .layer.on{ opacity:1; }
 
-  /* ===== Übergangseffekt: "Dissolve/Glow" beim Ausblenden (Annäherung) ===== */
+  /* "Dissolve/Glow" beim Ausblenden von LOGIN (Annäherung) */
   @keyframes dissolveOut {
     0%   { filter: blur(0px) brightness(1) contrast(1) drop-shadow(0 0 0 rgba(0,229,255,0)); transform: scale(1); opacity:1; }
     40%  { filter: blur(1px) brightness(1.05) contrast(1.05) drop-shadow(0 0 14px rgba(0,229,255,.28)); transform: scale(1.005); opacity:1; }
@@ -46,17 +46,7 @@
     will-change: filter, transform, opacity;
   }
 
-  /* ===== Start-Overlay (für Sound-Freigabe) ===== */
-  #startBtn{
-    position:absolute; inset:0; width:100%; height:100%;
-    background:rgba(0,0,0,.35);
-    border:0; color:#fff;
-    font-size:18px; letter-spacing:.10em;
-    cursor:pointer; z-index:50;
-    text-shadow:0 0 18px rgba(0,229,255,.25);
-  }
-
-  /* ===== Code UI ===== */
+  /* Code UI */
   #codeUI{
     position:absolute;
     inset:0;
@@ -100,7 +90,7 @@
   }
   .hint.on{ opacity:1; }
 
-  /* ===== Futuristischer Countdown ===== */
+  /* Futuristischer Countdown */
   #countdown{
     position:absolute;
     top:39.2%;
@@ -123,6 +113,7 @@
     pointer-events:none;
   }
   #countdown.on{ opacity:1; }
+
   .countPulse{
     animation: pulse .95s ease-in-out infinite;
   }
@@ -131,7 +122,7 @@
     50%{ transform:translateX(-50%) scale(1.05); opacity:.92; }
   }
 
-  /* ===== Denied Text ===== */
+  /* Denied Text */
   .denied{
     position:absolute;
     bottom:18px;
@@ -141,6 +132,7 @@
     font-weight:800;
     color:#fff;
     opacity:0;
+    text-shadow:0 2px 14px rgba(0,0,0,.75);
   }
   .denied.on{ opacity:1; }
 </style>
@@ -149,17 +141,17 @@
 <body>
 
 <div class="stage">
-  <button id="startBtn">KLICKEN, UM ZU STARTEN</button>
 
-  <video id="login" class="layer" playsinline preload="auto">
+  <!-- Videos: bewusst stumm für sofortigen Autostart -->
+  <video id="login" class="layer" muted playsinline preload="auto">
     <source src="LOGIN.MP4" type="video/mp4">
   </video>
 
-  <video id="server" class="layer" playsinline preload="auto">
+  <video id="server" class="layer" muted playsinline preload="auto">
     <source src="SERVER.MP4" type="video/mp4">
   </video>
 
-  <video id="deniedVid" class="layer" playsinline preload="auto">
+  <video id="deniedVid" class="layer" muted playsinline preload="auto">
     <source src="DENIED.MP4" type="video/mp4">
   </video>
 
@@ -180,9 +172,8 @@
 </div>
 
 <script>
+  // Nach Ende von DENIED.MP4 -> 3 Sekunden später Redirect
   const CALENDLY_URL = "https://calendly.com/r-goetze-tridensausgeführt";
-
-  const startBtn = document.getElementById('startBtn');
 
   const login = document.getElementById('login');
   const server = document.getElementById('server');
@@ -198,25 +189,22 @@
 
   let countdownTimer = null;
   let secondsLeft = 15;
-  let progressed = false; // verhindert doppeltes Triggern
+  let progressed = false;
+
+  // Übergang: SERVER startet kurz vor Ende LOGIN
+  let transitioned = false;
+  const OVERLAP_SEC = 0.8;
 
   function show(el){ el.classList.add('on'); }
   function hide(el){ el.classList.remove('on'); }
 
-  function clearInputs(){
-    inputs.forEach(i => i.value = "");
-  }
+  function clearInputs(){ inputs.forEach(i => i.value = ""); }
 
   function blurAll(){
-    // Mobile-Tastatur schließen
     inputs.forEach(i => i.blur());
-    document.activeElement?.blur?.();
-  }
-
-  async function playWithSound(video){
-    video.muted = false;
-    video.volume = 1.0;
-    try { await video.play(); } catch(e) {}
+    if (document.activeElement && typeof document.activeElement.blur === "function") {
+      document.activeElement.blur();
+    }
   }
 
   function stopCountdown(){
@@ -233,8 +221,6 @@
     countdownTimer = setInterval(() => {
       secondsLeft--;
       countdownEl.textContent = String(Math.max(secondsLeft,0)).padStart(2,'0');
-
-      // Wenn abgelaufen: genauso wie Enter weitergehen
       if (secondsLeft <= 0){
         stopCountdown();
         proceedToDenied();
@@ -250,7 +236,6 @@
     hint.classList.add('on');
     startCountdown();
 
-    // Fokus auf erstes Feld
     setTimeout(() => inputs[0].focus(), 60);
   }
 
@@ -272,11 +257,10 @@
     // Bild weg, denied an
     hide(codeImg);
     show(denied);
-    playWithSound(denied);
+    try { denied.play(); } catch(e) {}
 
     deniedText.classList.add('on');
 
-    // Nach Video-Ende + 3s weiterleiten
     denied.onended = () => {
       setTimeout(() => {
         window.location.href = CALENDLY_URL;
@@ -284,49 +268,55 @@
     };
   }
 
-  // ===== Übergang LOGIN -> SERVER flüssiger: Overlap + dissolve =====
-  function scheduleSmoothTransition(){
-    // starte server kurz vor Ende des login-videos
-    const overlap = 0.75; // Sekunden Überlappung
-    const d = login.duration;
+  async function doTransitionToServer(){
+    if (transitioned) return;
+    transitioned = true;
 
-    // Fallback, falls duration nicht sauber da ist
-    if (!isFinite(d) || d <= overlap + 0.1){
-      login.onended = () => startServerNow();
-      return;
-    }
-
-    const ms = Math.max(0, (d - overlap) * 1000);
-    setTimeout(() => {
-      // Nur wenn LOGIN noch läuft
-      if (!login.paused && !login.ended) startServerNow();
-    }, ms);
-
-    // Zusätzlich falls irgendwas nicht triggert:
-    login.onended = () => {
-      if (server.classList.contains('on')) return;
-      startServerNow();
-    };
-  }
-
-  async function startServerNow(){
+    // SERVER sichtbar + starten (stumm, damit es überall sicher läuft)
     show(server);
-    await playWithSound(server);
+    try { await server.play(); } catch(e) {}
 
-    // LOGIN "auflösen" (Annäherung)
+    // LOGIN "auflösen"
     login.classList.add('dissolve');
-
-    // sicherheitshalber nach Ende der Dissolve-Animation ausblenden
     setTimeout(() => hide(login), 900);
 
     server.onended = () => proceedToCode();
+
+    // Fallback: falls onended mal nicht feuert
+    if (isFinite(server.duration) && server.duration > 0){
+      setTimeout(() => {
+        if (!progressed && !codeImg.classList.contains('on') && !denied.classList.contains('on')) {
+          proceedToCode();
+        }
+      }, Math.ceil(server.duration * 1000) + 300);
+    }
   }
 
-  // ===== Input Verhalten =====
+  function attachSmoothTrigger(){
+    transitioned = false;
+
+    const onTime = () => {
+      if (!isFinite(login.duration) || login.duration <= 0) return;
+      const remaining = login.duration - login.currentTime;
+      if (remaining <= OVERLAP_SEC){
+        login.removeEventListener('timeupdate', onTime);
+        doTransitionToServer();
+      }
+    };
+
+    login.addEventListener('timeupdate', onTime);
+
+    login.onended = () => {
+      login.removeEventListener('timeupdate', onTime);
+      doTransitionToServer();
+    };
+  }
+
+  // Input Verhalten: 1 Zeichen, auto-advance, Enter -> denied
   inputs.forEach((i, idx) => {
     i.addEventListener('input', () => {
       if (!i.value) return;
-      i.value = i.value.slice(-1); // nur 1 Zeichen
+      i.value = i.value.slice(-1);
       if (inputs[idx+1]) inputs[idx+1].focus();
     });
 
@@ -338,11 +328,12 @@
     });
   });
 
-  // ===== Start (für Sound) =====
-  startBtn.addEventListener('click', async () => {
-    startBtn.style.display = 'none';
-
+  // ===== AUTOSTART (stumm) =====
+  function resetAll(){
     progressed = false;
+    transitioned = false;
+
+    // alles aus
     hide(server); hide(denied); hide(codeImg);
     codeUI.classList.remove('on');
     hint.classList.remove('on');
@@ -350,15 +341,23 @@
     countdownEl.classList.remove('on','countPulse');
     stopCountdown();
     clearInputs();
+    blurAll();
+
+    // videos reset
+    [login, server, denied].forEach(v => {
+      try { v.pause(); v.currentTime = 0; } catch(e) {}
+    });
+    login.classList.remove('dissolve');
+  }
+
+  (async function start(){
+    resetAll();
 
     show(login);
-    await playWithSound(login);
+    try { await login.play(); } catch(e) {}
 
-    // Smooth transition vorbereiten
-    login.onloadedmetadata = scheduleSmoothTransition;
-    // falls metadata schon da ist:
-    if (isFinite(login.duration) && login.duration > 0) scheduleSmoothTransition();
-  }, { passive:true });
+    attachSmoothTrigger();
+  })();
 </script>
 
 </body>
