@@ -90,36 +90,91 @@
   }
   .hint.on{ opacity:1; }
 
-  /* Futuristischer Countdown */
-  #countdown{
+  /* ===== Futuristischer Countdown (Glas + Scanlines + Neon) =====
+     - steht unter dem Hint
+     - minimal nach rechts verschoben, damit optisch mittig im Bild wirkt
+  */
+  #countdownWrap{
     position:absolute;
-    top:39.2%;
-    left:50%;
+    top:58.3%;              /* Abstand unter der Eingabeaufforderung */
+    left:50.65%;            /* winzig weiter rechts */
     transform:translateX(-50%);
-    min-width:140px;
-    text-align:center;
-    font-weight:800;
-    font-size:34px;
-    letter-spacing:.18em;
-    color:#c9f2ff;
     opacity:0;
     transition:opacity .25s ease;
+    pointer-events:none;
+    user-select:none;
+  }
+  #countdownWrap.on{ opacity:1; }
+
+  #countdownGlass{
+    position:relative;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    min-width:160px;
+    height:54px;
+    padding:0 18px;
+    border-radius:14px;
+    background:rgba(0,0,0,.28);
+    border:1px solid rgba(140,235,255,.32);
+    box-shadow:
+      0 0 18px rgba(0,229,255,.10),
+      inset 0 0 18px rgba(0,229,255,.08);
+    backdrop-filter: blur(6px);
+  }
+
+  /* Scanlines */
+  #countdownGlass::before{
+    content:"";
+    position:absolute;
+    inset:8px 10px;
+    border-radius:10px;
+    background:repeating-linear-gradient(
+      to bottom,
+      rgba(0,229,255,.10) 0px,
+      rgba(0,229,255,.10) 1px,
+      rgba(0,0,0,0) 3px,
+      rgba(0,0,0,0) 6px
+    );
+    opacity:.22;
+    mix-blend-mode:screen;
+    pointer-events:none;
+  }
+
+  /* kleine Ecken/Tech-Details */
+  #countdownGlass::after{
+    content:"";
+    position:absolute;
+    inset:-1px;
+    border-radius:14px;
+    background:linear-gradient(120deg, rgba(0,229,255,.22), rgba(0,0,0,0), rgba(0,229,255,.18));
+    opacity:.35;
+    pointer-events:none;
+  }
+
+  #countdown{
+    position:relative;
+    z-index:1;
+    font-size:34px;
+    font-weight:900;
+    letter-spacing:.22em;
+    /* "futuristische" Anmutung über Mono/Tech-Fonts (falls vorhanden), sonst fallback */
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+                 "Share Tech Mono","Orbitron","Rajdhani","Oxanium", monospace;
+    color:#c9f2ff;
     text-shadow:
       0 0 10px rgba(0,229,255,.35),
       0 0 22px rgba(0,229,255,.18),
       0 2px 14px rgba(0,0,0,.55);
     filter: drop-shadow(0 0 18px rgba(0,229,255,.14));
-    user-select:none;
-    pointer-events:none;
   }
-  #countdown.on{ opacity:1; }
 
   .countPulse{
     animation: pulse .95s ease-in-out infinite;
   }
   @keyframes pulse{
-    0%,100%{ transform:translateX(-50%) scale(1); opacity:1; }
-    50%{ transform:translateX(-50%) scale(1.05); opacity:.92; }
+    0%,100%{ transform:translateX(-50%) scale(1); }
+    50%{ transform:translateX(-50%) scale(1.04); }
   }
 
   /* Denied Text */
@@ -142,7 +197,7 @@
 
 <div class="stage">
 
-  <!-- Videos: bewusst stumm für sofortigen Autostart -->
+  <!-- Videos: stumm für sofortigen Autostart -->
   <video id="login" class="layer" muted playsinline preload="auto">
     <source src="LOGIN.MP4" type="video/mp4">
   </video>
@@ -158,22 +213,29 @@
   <img id="codeImg" class="layer" src="CODE.jpg" alt="Code Eingabe">
 
   <div id="codeUI">
-    <div id="countdown">15</div>
-
     <div class="code-row">
       <input maxlength="1"><input maxlength="1"><input maxlength="1">
       <input maxlength="1"><input maxlength="1"><input maxlength="1"><input maxlength="1">
     </div>
 
     <div id="hint" class="hint">Bitte geben Sie den Zugangscode ein.</div>
+
+    <!-- Futuristischer Countdown unter der Aufforderung -->
+    <div id="countdownWrap">
+      <div id="countdownGlass">
+        <div id="countdown">15</div>
+      </div>
+    </div>
   </div>
 
   <div id="deniedText" class="denied">Zugang verweigert</div>
 </div>
 
 <script>
-  // Nach Ende von DENIED.MP4 -> 3 Sekunden später Redirect
-  const CALENDLY_URL = "https://calendly.com/r-goetze-tridensausgeführt";
+  // Redirect (robust): nach Ende von DENIED.MP4 + 3 Sekunden
+  // Hinweis: die URL enthält "ü" -> sicherheitshalber korrekt encoden
+  const CALENDLY_URL_RAW = "https://calendly.com/r-goetze-tridensausgeführt";
+  const CALENDLY_URL = encodeURI(CALENDLY_URL_RAW);
 
   const login = document.getElementById('login');
   const server = document.getElementById('server');
@@ -182,6 +244,8 @@
   const codeImg = document.getElementById('codeImg');
   const codeUI = document.getElementById('codeUI');
   const hint = document.getElementById('hint');
+
+  const countdownWrap = document.getElementById('countdownWrap');
   const countdownEl = document.getElementById('countdown');
 
   const deniedText = document.getElementById('deniedText');
@@ -194,6 +258,10 @@
   // Übergang: SERVER startet kurz vor Ende LOGIN
   let transitioned = false;
   const OVERLAP_SEC = 0.8;
+
+  // Redirect-Guards
+  let redirectArmed = false;
+  let redirectDone = false;
 
   function show(el){ el.classList.add('on'); }
   function hide(el){ el.classList.remove('on'); }
@@ -212,20 +280,31 @@
     countdownTimer = null;
   }
 
+  function setCountdown(n){
+    countdownEl.textContent = String(n).padStart(2,'0');
+  }
+
   function startCountdown(){
     stopCountdown();
     secondsLeft = 15;
-    countdownEl.textContent = String(secondsLeft).padStart(2,'0');
-    countdownEl.classList.add('on','countPulse');
+    setCountdown(secondsLeft);
+
+    countdownWrap.classList.add('on');
+    countdownWrap.classList.add('countPulse');
 
     countdownTimer = setInterval(() => {
       secondsLeft--;
-      countdownEl.textContent = String(Math.max(secondsLeft,0)).padStart(2,'0');
+      setCountdown(Math.max(secondsLeft,0));
       if (secondsLeft <= 0){
         stopCountdown();
         proceedToDenied();
       }
     }, 1000);
+  }
+
+  function hideCountdown(){
+    countdownWrap.classList.remove('on');
+    countdownWrap.classList.remove('countPulse');
   }
 
   function proceedToCode(){
@@ -234,9 +313,45 @@
 
     codeUI.classList.add('on');
     hint.classList.add('on');
+
+    // Countdown erst JETZT anzeigen
     startCountdown();
 
     setTimeout(() => inputs[0].focus(), 60);
+  }
+
+  function armRedirectAfterDeniedEnds(){
+    if (redirectArmed) return;
+    redirectArmed = true;
+
+    const doRedirect = () => {
+      if (redirectDone) return;
+      redirectDone = true;
+      setTimeout(() => {
+        window.location.assign(CALENDLY_URL);
+      }, 2000);
+    };
+
+    // Normal: onended
+    denied.onended = doRedirect;
+
+    // Robust: timeupdate (falls onended nicht feuert)
+    const onTime = () => {
+      if (!isFinite(denied.duration) || denied.duration <= 0) return;
+      if (denied.currentTime >= denied.duration - 0.06) {
+        denied.removeEventListener('timeupdate', onTime);
+        doRedirect();
+      }
+    };
+    denied.addEventListener('timeupdate', onTime);
+
+    // Extra-Fallback: wenn duration da ist, setze Timer
+    if (isFinite(denied.duration) && denied.duration > 0) {
+      setTimeout(doRedirect, Math.ceil(denied.duration * 1000) + 400);
+    } else {
+      // Letzter Fallback: nach 12s (falls Metadaten fehlen)
+      setTimeout(doRedirect, 12000);
+    }
   }
 
   function proceedToDenied(){
@@ -244,7 +359,7 @@
     progressed = true;
 
     stopCountdown();
-    countdownEl.classList.remove('on','countPulse');
+    hideCountdown();
     hint.classList.remove('on');
 
     // Tastatur weg + Felder leeren
@@ -261,22 +376,19 @@
 
     deniedText.classList.add('on');
 
-    denied.onended = () => {
-      setTimeout(() => {
-        window.location.href = CALENDLY_URL;
-      }, 3000);
-    };
+    // Redirect zuverlässig vorbereiten
+    // (onloadedmetadata kann später kommen – wir arming trotzdem sofort)
+    armRedirectAfterDeniedEnds();
+    denied.onloadedmetadata = armRedirectAfterDeniedEnds;
   }
 
   async function doTransitionToServer(){
     if (transitioned) return;
     transitioned = true;
 
-    // SERVER sichtbar + starten (stumm, damit es überall sicher läuft)
     show(server);
     try { await server.play(); } catch(e) {}
 
-    // LOGIN "auflösen"
     login.classList.add('dissolve');
     setTimeout(() => hide(login), 900);
 
@@ -312,7 +424,7 @@
     };
   }
 
-  // Input Verhalten: 1 Zeichen, auto-advance, Enter -> denied
+  // Inputs: 1 Zeichen, auto-advance, Enter -> denied
   inputs.forEach((i, idx) => {
     i.addEventListener('input', () => {
       if (!i.value) return;
@@ -332,18 +444,21 @@
   function resetAll(){
     progressed = false;
     transitioned = false;
+    redirectArmed = false;
+    redirectDone = false;
 
-    // alles aus
     hide(server); hide(denied); hide(codeImg);
     codeUI.classList.remove('on');
     hint.classList.remove('on');
     deniedText.classList.remove('on');
-    countdownEl.classList.remove('on','countPulse');
+
     stopCountdown();
+    hideCountdown();
+    setCountdown(15);
+
     clearInputs();
     blurAll();
 
-    // videos reset
     [login, server, denied].forEach(v => {
       try { v.pause(); v.currentTime = 0; } catch(e) {}
     });
